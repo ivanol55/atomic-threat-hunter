@@ -1,0 +1,23 @@
+{
+    "preferences": {
+        "integrations": {
+            "datadog": {
+                "dd_api_key": "",
+                "endpoint": "https://http-intake.logs.datadoghq.eu/api/v2/logs"
+            }
+        }
+    },
+    "profiles": {
+        "example-profile": {
+            "name": "Example - targets some example domains that could be of interest",
+            "description": "Targets actions against several chosen environments that could be vulnerable, or that can work as an example for us.",
+            "targets": [
+                "google.com",
+                "yahoo.com"
+            ],
+            "channels": [
+                "datadog"
+            ]
+        }
+    }
+}
