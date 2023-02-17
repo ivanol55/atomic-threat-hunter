@@ -15,10 +15,13 @@ type Config struct {
 
 // Declares the struct for profiles, consisting of A name, a description and an array of strings that are considered targets
 type Profile struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Targets     []string `json:"targets"`
-	Channels    []string `json:"channels"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description"`
+	Targets           []string          `json:"targets"`
+	RequestsPerSecond int               `json:"requests_per_second"`
+	ExcludeSeverity   []string          `json:"exclude_severity"`
+	ExcludeType       []string          `json:"exclude_type"`
+	Channels          ReportingChannels `json:"channels"`
 }
 
 type Preferences struct {
@@ -32,6 +35,11 @@ type Integration struct {
 type Datadog struct {
 	DdApiKey string `json:"dd_api_key"`
 	Endpoint string `json:"endpoint"`
+}
+
+type ReportingChannels struct {
+	Vulnerabilities []string `json:"vulnerabilities"`
+	Subdomains      []string `json:"subdomains"`
 }
 
 // Declare the function that retrieves the profile from the configuration file and returns it back as a struct

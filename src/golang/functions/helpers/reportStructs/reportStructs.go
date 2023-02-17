@@ -27,3 +27,8 @@ type VulnerabilityInfo struct {
 	Reference   []string `json:"reference"`
 	Severity    string   `json:"severity"`
 }
+
+// Establishes the report structs for domains so we can parse it from the processed data on the subdomain reconaissance feature
+type Domain struct {
+	Domain string `json:"domain"`
+}

@@ -1,46 +1,23 @@
 // Sets the package name to import from the helper runner
-package scan
+package subdomains
 
 // Imports necessary packages for the functions to run the security scan phase
 import (
 	alertIntegrations "atomic-threat-hunter/src/golang/functions/alertIntegrations/sendAlert"
 	"atomic-threat-hunter/src/golang/functions/helpers/configManagement"
-	"atomic-threat-hunter/src/golang/functions/helpers/reportStructs"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"strings"
 )
 
-// Declares the struct we'll store the linted results in for matching, as we need to prepare them for matching and comparison later in the process with dictionaries
-type LintedScanEntries struct {
-	LintedScanEntry LintedEntry
-	RawScanEntry    string
-}
-
-// sets a lintedEntry struct to store the template ID and URL where it was matched, a combination of unique values we use to find out about new alerts
-type LintedEntry struct {
-	TemplateId string
-	MatchedAt  string
-}
-
-// Struct we'll use as a dictionary to compare results between old and new scans, so we can find out the differences between them and get just the new results
-type ComparationDictionary struct {
-	CombinedName string
-	RawValue     string
-}
-
 // Main function that runs the rest of the helpers inside of this file. It handles scanning the existing targets for the given profile, processing the scan diff, and sending it to the proper alert target integrations
-func RunScan(profileName string, profile configManagement.Profile) {
+func CheckNewSubdomains(profileName string, profile configManagement.Profile) {
 	// Checks if the target file exists first, in case we need to warn about running a scan first
 	checkForTargets(profileName)
 	// Checks if this is the first scan or if we need to process the difference between the last scan and this one
 	var lastScanExists bool = checkForLastScan(profileName)
-	// Scans the targets identified for vulnerabilities and stores the results in a latest.txt file inside the results folder for the profile
-	scanTargets(profileName)
 	// Handles creating a diff file, either just copying the original file if no previous file existed, or handling getting only the new results, and storing them inside of diff.txt
 	createScanDiff(profileName, lastScanExists)
 	// Send diff.txt data to the channels selected by the profile with their proper integration
@@ -59,42 +36,34 @@ func checkForTargets(profileName string) {
 		os.Exit(1)
 	} else {
 		// If the file exists, inform the user and continue with the process
-		fmt.Println("Found target file! all clear for vulnerability scanning with the selected profile.")
+		fmt.Println("Found target file! all clear for subdomain scanning with the selected profile.")
 	}
 }
 
 // Check if we have a last scan stored. Return true or false if this scan exists or not for further branching decisions
 func checkForLastScan(profileName string) bool {
-	var checkFile string = "./scans/" + profileName + "/results/last.txt"
+	var checkFile string = "./scans/" + profileName + "/targets/last.txt"
 	var lastScanExists bool
 	_, err := os.Stat(checkFile)
 	if err != nil {
 		// Return false if the last.txt file doesn't exist
-		fmt.Println("No last scan found! We'll run the routine to report all vulnerabilities found.")
+		fmt.Println("No last report found! We'll run the routine to report all new subdomains found.")
 		lastScanExists = false
 		return lastScanExists
 	} else {
 		// Return true if the last.txt file exists
-		fmt.Println("Found older scan from the last execution! We'll run a full scan and just report the difference so we avoid dobule alerts.")
+		fmt.Println("Found older subdomain report from the last execution! We'll run a comparison and just report the difference so we avoid dobule alerts.")
 		lastScanExists = true
 		return lastScanExists
 	}
 }
 
-// Run a security scan with Nuclei to the discovered targets in the scanning phase
-func scanTargets(profileName string) {
-	fmt.Println("Running security vulnerability scan with Nuclei. This might take a while...")
-	var command string = "nuclei --list ./scans/" + profileName + "/targets/targets.txt --exclude-severity info,unknown --exclude-type network --json --output ./scans/" + profileName + "/results/latest.txt"
-	var commandObject = exec.Command("sh", "-c", command)
-	commandObject.Run()
-}
-
-// Create the diff.txt file from
+// Create the diff.txt file from the target reports
 func createScanDiff(profileName string, lastScanExists bool) {
 	// Prepare the file references for all needed files
-	var newScanFile string = "./scans/" + profileName + "/results/latest.txt"
-	var oldScanFile string = "./scans/" + profileName + "/results/last.txt"
-	var diffFile string = "./scans/" + profileName + "/results/diff.txt"
+	var newScanFile string = "./scans/" + profileName + "/targets/targets.txt"
+	var oldScanFile string = "./scans/" + profileName + "/targets/last.txt"
+	var diffFile string = "./scans/" + profileName + "/targets/diff.txt"
 	if lastScanExists == false {
 		// If there is no older file, we have no old reference and all vulnerabilities are new. Copy latest.txt to last.txt and diff.txt, then continue to alert handling
 		fmt.Println("As no older scan existed, we're using this one as the first known result and send it to the proper destination.")
@@ -119,71 +88,33 @@ func createScanDiff(profileName string, lastScanExists bool) {
 		var newScanFileString string = string(newScanFileBuf.Bytes())
 		var newScanFileArray []string = strings.Split(newScanFileString, "\n")
 		// Prepare a better set of arrays with the data to avoid comparing timestamps
-		var lintedOldScanArray []LintedScanEntries
-		var lintedNewScanArray []LintedScanEntries
-		// Prepare arrays we can use to compare them on the diff file. As the raw json entries include timestamps, we can't compare them reliably, so we use a combination of rule ID and target URL's
-		lintedOldScanArray, lintedNewScanArray = prepareVulnerabilityArrays(oldScanFileArray, newScanFileArray)
 		// Run the function to check if something on the new array is not on the old one, send it to the diff file
-		generateDiffFile(lintedOldScanArray, lintedNewScanArray, profileName)
+		generateDiffFile(oldScanFileArray, newScanFileArray, profileName)
 	}
 }
 
-func prepareVulnerabilityArrays(oldScanFileArray []string, newScanFileArray []string) ([]LintedScanEntries, []LintedScanEntries) {
-	// Prepare all variables we'll need to disassemble the scan arrays we got sent in
-	var scanEntry string
-	var scanEntryStruct reportStructs.Vulnerability
-	var targetScanStruct LintedScanEntries
-	var lintedEntry LintedEntry
-	var templateId string
-	var matchedAt string
-	var lintedOldScanArray []LintedScanEntries
-	// Prepare the old json array as an object we can properly compare later
-	for _, scanEntry = range oldScanFileArray {
-		json.Unmarshal([]byte(scanEntry), &scanEntryStruct)
-		templateId = scanEntryStruct.TemplateId
-		matchedAt = scanEntryStruct.MatchedAt
-		lintedEntry = LintedEntry{TemplateId: templateId, MatchedAt: matchedAt}
-		targetScanStruct = LintedScanEntries{LintedScanEntry: lintedEntry, RawScanEntry: scanEntry}
-		lintedOldScanArray = append(lintedOldScanArray, targetScanStruct)
-	}
-	// Prepare the new json array as an object we can properly compare later
-	var lintedNewScanArray []LintedScanEntries
-	for _, scanEntry = range newScanFileArray {
-		json.Unmarshal([]byte(scanEntry), &scanEntryStruct)
-		templateId = scanEntryStruct.TemplateId
-		matchedAt = scanEntryStruct.MatchedAt
-		lintedEntry = LintedEntry{TemplateId: templateId, MatchedAt: matchedAt}
-		targetScanStruct = LintedScanEntries{LintedScanEntry: lintedEntry, RawScanEntry: scanEntry}
-		lintedNewScanArray = append(lintedNewScanArray, targetScanStruct)
-	}
-	// Return the arrays we just built with the cleaned data separate with template ID's, matching URL's and the JSON object as a string we can then add to the final file
-	return lintedOldScanArray, lintedNewScanArray
-}
-
-// Get the linted arrays we just generated with proper keys and stringified json, check for new entries, and save them to diff.txt
-func generateDiffFile(lintedOldScanArray []LintedScanEntries, lintedNewScanArray []LintedScanEntries, profileName string) {
+// Get the linted arrays we just generated with proper keys and a dummy value, check for new entries, and save them to diff.txt
+func generateDiffFile(oldScanFileArray []string, newScanFileArray []string, profileName string) {
 	// Prepare the comparation dictionary with all old keys (template id + matched URL), and values (stringified json we can unmarshal later)
-	var oldEntriesDict map[string]string = map[string]string{}
+	var oldEntriesDict map[string]bool = map[string]bool{}
 	var oldEntryKeyName string
-	var oldEntryJson string
-	for _, oldEntry := range lintedOldScanArray {
-		oldEntryKeyName = oldEntry.LintedScanEntry.TemplateId + oldEntry.LintedScanEntry.MatchedAt
-		oldEntryJson = oldEntry.RawScanEntry
-		oldEntriesDict[oldEntryKeyName] = oldEntryJson
+	for _, oldEntry := range oldScanFileArray {
+		oldEntryKeyName = oldEntry
+		oldEntriesDict[oldEntryKeyName] = true
 	}
+	fmt.Println(oldEntriesDict)
 	// Prepare the same array with the values from the new scan, check if the key exists in the old scan, and if it doesn't, attach it to the diff array
 	var diffEntries []string
 	var newEntryKeyName string
-	var newEntryJson string
-	for _, newEntry := range lintedNewScanArray {
-		newEntryKeyName = newEntry.LintedScanEntry.TemplateId + newEntry.LintedScanEntry.MatchedAt
-		newEntryJson = newEntry.RawScanEntry
+	for _, newEntry := range newScanFileArray {
+		newEntryKeyName = newEntry
 		// If the key we'd use in the new scan does not exist in the old scan, it means it's a new finding, so we add it to the final array
 		_, exists := oldEntriesDict[newEntryKeyName]
 		if exists == false {
-			diffEntries = append(diffEntries, newEntryJson)
+			diffEntries = append(diffEntries, newEntry)
 		}
 	}
+	fmt.Println(diffEntries)
 	// Store every new entry as a newline-separated entry in a single string
 	var diffEntriesString string
 	for _, entry := range diffEntries {
@@ -194,7 +125,7 @@ func generateDiffFile(lintedOldScanArray []LintedScanEntries, lintedNewScanArray
 	var diffBuffer bytes.Buffer
 	var diffFile *os.File
 	var diffFileName string
-	diffFileName = "./scans/" + profileName + "/results/diff.txt"
+	diffFileName = "./scans/" + profileName + "/targets/diff.txt"
 	diffBytes = []byte(diffEntriesString)
 	diffBuffer.Write(diffBytes)
 	diffFile, _ = os.Create(diffFileName)
@@ -203,5 +134,5 @@ func generateDiffFile(lintedOldScanArray []LintedScanEntries, lintedNewScanArray
 
 // Process the reports with every integration stated in the profile
 func processScanDiff(profileName string, profile configManagement.Profile) {
-	alertIntegrations.SendAlert(profileName, profile)
+	alertIntegrations.SendAlert(profileName, profile, "subdomains")
 }
