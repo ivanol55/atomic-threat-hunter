@@ -65,7 +65,7 @@ func createScanDiff(profileName string, lastScanExists bool) {
 	var oldScanFile string = "./scans/" + profileName + "/targets/last.txt"
 	var diffFile string = "./scans/" + profileName + "/targets/diff.txt"
 	if lastScanExists == false {
-		// If there is no older file, we have no old reference and all vulnerabilities are new. Copy latest.txt to last.txt and diff.txt, then continue to alert handling
+		// If there is no older file, we have no old reference and all domains are new. Copy latest.txt to last.txt and diff.txt, then continue to alert handling
 		fmt.Println("As no older scan existed, we're using this one as the first known result and send it to the proper destination.")
 		newScanBuffer, _ := ioutil.ReadFile(newScanFile)
 		ioutil.WriteFile(oldScanFile, newScanBuffer, os.ModePerm)
@@ -102,7 +102,6 @@ func generateDiffFile(oldScanFileArray []string, newScanFileArray []string, prof
 		oldEntryKeyName = oldEntry
 		oldEntriesDict[oldEntryKeyName] = true
 	}
-	fmt.Println(oldEntriesDict)
 	// Prepare the same array with the values from the new scan, check if the key exists in the old scan, and if it doesn't, attach it to the diff array
 	var diffEntries []string
 	var newEntryKeyName string
@@ -114,7 +113,6 @@ func generateDiffFile(oldScanFileArray []string, newScanFileArray []string, prof
 			diffEntries = append(diffEntries, newEntry)
 		}
 	}
-	fmt.Println(diffEntries)
 	// Store every new entry as a newline-separated entry in a single string
 	var diffEntriesString string
 	for _, entry := range diffEntries {
