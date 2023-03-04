@@ -5,6 +5,7 @@ package requiredArgCount
 import (
 	"atomic-threat-hunter/src/golang/functions/helpers/generalHelp"
 	"atomic-threat-hunter/src/golang/functions/scanner/scannerHelp"
+	"os"
 )
 
 // Declares a function that passes in an argument list and a number of required args to check if the count is correct
@@ -19,5 +20,6 @@ func CheckForArgs(args []string, requiredCount int, requestedHelp string) {
 		case "scan":
 			scannerHelp.ShowHelp()
 		}
+		os.Exit(0)
 	}
 }
