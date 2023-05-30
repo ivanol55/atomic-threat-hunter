@@ -1,4 +1,4 @@
-FROM golang:1.19.5-alpine3.17 AS builder
+FROM golang:1.20.4-alpine3.18 AS builder
 
 # Copy the repository into the working directory
 WORKDIR /atomic-threat-hunter
