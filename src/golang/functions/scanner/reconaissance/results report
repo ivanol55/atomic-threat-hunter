@@ -1,0 +1,104 @@
+//a function to generate a detailed report on the results of the scan, indicating the vulnerabilities found, 
+//recommendations for fixing and other useful information. The report will be generated in HTML format
+
+package main
+
+import (
+	"fmt"
+	"os"
+	"time"
+)
+
+// Vulnerability struct to store information about each vulnerability
+type Vulnerability struct {
+	Name        string
+	Description string
+	Recommendations []string
+}
+
+// Function to generate a detailed report in HTML format
+func generateDetailedReport(scanResults []Vulnerability) {
+	// Create a new HTML file
+	file, err := os.Create("detailed_report.html")
+	if err != nil {
+		fmt.Println("Error creating report file:", err)
+		return
+	}
+	defer file.Close()
+
+	// Write the HTML header
+	header := `<!DOCTYPE html>
+<html>
+<head>
+	<title>Detailed Scan Report</title>
+	<style>
+		h1, h2, p, ul, li {
+			font-family: Arial, sans-serif;
+		}
+	</style>
+</head>
+<body>
+	<h1>Detailed Scan Report</h1>
+	<p>Scan Date: %s</p>
+	<hr>
+	<h2>Scan Results</h2>
+	<ul>`
+	file.WriteString(fmt.Sprintf(header, time.Now().Format("2006-01-02 15:04:05")))
+
+	// Write the scan results to the HTML file
+	for _, result := range scanResults {
+		listItem := fmt.Sprintf("\t\t<li><strong>%s:</strong> %s</li>\n", result.Name, result.Description)
+		file.WriteString(listItem)
+
+		// Write the recommendations for each vulnerability
+		if len(result.Recommendations) > 0 {
+			file.WriteString("\t\t<ul>\n")
+			for _, recommendation := range result.Recommendations {
+				recommendationItem := fmt.Sprintf("\t\t\t<li>%s</li>\n", recommendation)
+				file.WriteString(recommendationItem)
+			}
+			file.WriteString("\t\t</ul>\n")
+		}
+	}
+
+	// Write the HTML footer
+	footer := `
+	</ul>
+	<hr>
+	<h2>Recommendations</h2>
+	<p>Provide general recommendations for securing the system.</p>
+</body>
+</html>`
+	file.WriteString(footer)
+
+	fmt.Println("Detailed report generated successfully!")
+}
+
+func main() {
+	// Sample scan results
+	scanResults := []Vulnerability{
+		{
+			Name:        "Vulnerability 1",
+			Description: "Description of vulnerability 1",
+			Recommendations: []string{
+				"Recommendation 1",
+				"Recommendation 2",
+			},
+		},
+		{
+			Name:        "Vulnerability 2",
+			Description: "Description of vulnerability 2",
+			Recommendations: []string{
+				"Recommendation 3",
+				"Recommendation 4",
+			},
+		},
+		{
+			Name:        "Vulnerability 3",
+			Description: "Description of vulnerability 3",
+		},
+	}
+
+	// Generate the detailed report
+	generateDetailedReport(scanResults)
+}
