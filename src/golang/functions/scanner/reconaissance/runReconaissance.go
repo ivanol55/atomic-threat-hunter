@@ -1,7 +1,7 @@
 // Sets the package name to import from the helper runner
 package reconaissance
 
-// Imports necessary packages for the functions to run the reconaissance phase
+// Imports necessary packages for the functions to run the reconnaissance phase
 import (
 	"atomic-threat-hunter/src/golang/functions/helpers/configManagement"
 	"bytes"
@@ -18,6 +18,7 @@ func RunRecon(profileName string, profile configManagement.Profile) {
 	enumerateDomains(profileName, profile)
 	var cleanTargetList []string = lintEnumeration(profileName)
 	filterAliveTargets(profileName, cleanTargetList)
+	checkDomainSecurity(profileName, cleanTargetList)
 	cleanupUnnecessaryFiles(profileName)
 }
 
@@ -82,7 +83,7 @@ func lintEnumeration(profileName string) []string {
 	var lintedTarget string
 	var occurrences int
 	var checkedTarget string
-	// Iterate over every entry in the list we consolidated from all the reconaissance results, which has duplicates
+	// Iterate over every entry in the list we consolidated from all the reconnaissance results, which has duplicates
 	fmt.Println("Removing result duplicates...")
 	for _, lintedTarget = range bufferList {
 		// Reset the occurrences finding, assuming we have found the first occurrence (lintedTarget)
@@ -94,7 +95,7 @@ func lintEnumeration(profileName string) []string {
 				occurrences = occurrences + 1
 			}
 		}
-		// If we have not found any new occurrences it means the lintedTarget is not on the final array, so we add it in
+		// If we have not found any new occurrences, it means the lintedTarget is not in the final array, so we add it
 		if occurrences == 1 {
 			lintedTargetList = append(lintedTargetList, lintedTarget)
 		}
@@ -112,16 +113,85 @@ func filterAliveTargets(profileName string, cleanTargetList []string) {
 	}
 	// Clears the last comma as it can cause trouble
 	domainString = strings.TrimSuffix(domainString, ",")
-	// use httpx to test if the target domains we discovered are alive, and store them inside of a targets file
+	// Use httpx to test if the target domains we discovered are alive and store them inside of a targets file
 	fmt.Println("Checking what targets are actually active...")
 	var command string = "httpx -u " + domainString + " -o ./scans/" + profileName + "/targets/targets.txt"
 	var commandObject = exec.Command("sh", "-c", command)
 	commandObject.Run()
 }
 
-// After finishing the reconaissance phase, clean out the unnecessary files from the system
+// Function that checks the security of the discovered domains using Nmap, Nikto, and OWASP ZAP
+func checkDomainSecurity(profileName string, cleanTargetList []string) {
+	fmt.Println("Checking the security of discovered domains...")
+	for _, domain := range cleanTargetList {
+		fmt.Println("Checking domain:", domain)
+		// Run Nmap scan
+		nmapCommand := exec.Command("nmap", "-p 80,443", domain)
+		nmapOutput, err := nmapCommand.Output()
+		if err != nil {
+			fmt.Println("Error running Nmap scan:", err)
+		} else {
+			fmt.Println("Nmap output for", domain, ":\n", string(nmapOutput))
+		}
+
+		// Run Nikto scan
+		niktoCommand := exec.Command("nikto", "-h", domain)
+		niktoOutput, err := niktoCommand.Output()
+		if err != nil {
+			fmt.Println("Error running Nikto scan:", err)
+		} else {
+			fmt.Println("Nikto output for", domain, ":\n", string(niktoOutput))
+		}
+
+		// Run OWASP ZAP scan
+		owaspZapCommand := exec.Command("zap-cli", "quick-scan", "-t", domain)
+		owaspZapOutput, err := owaspZapCommand.Output()
+		if err != nil {
+			fmt.Println("Error running OWASP ZAP scan:", err)
+		} else {
+			fmt.Println("OWASP ZAP output for", domain, ":\n", string(owaspZapOutput))
+		}
+	}
+}
+
+// Function that analyzes the DNS configuration for the discovered domains
+func analyzeDNSConfiguration(profileName string, cleanTargetList []string) {
+	fmt.Println("Analyzing DNS configuration for discovered domains...")
+	for _, domain := range cleanTargetList {
+		fmt.Println("Analyzing domain:", domain)
+
+		// Run DNS reconnaissance using dig command
+		digCommand := exec.Command("dig", domain)
+		digOutput, err := digCommand.Output()
+		if err != nil {
+			fmt.Println("Error running dig command:", err)
+		} else {
+			fmt.Println("DNS reconnaissance output for", domain, ":\n", string(digOutput))
+		}
+
+		// Run DNSSEC verification using dig command
+		dnssecCommand := exec.Command("dig", "+dnssec", domain)
+		dnssecOutput, err := dnssecCommand.Output()
+		if err != nil {
+			fmt.Println("Error running DNSSEC verification:", err)
+		} else {
+			fmt.Println("DNSSEC verification output for", domain, ":\n", string(dnssecOutput))
+		}
+
+		// Run DNS zone transfer using dig command
+		zoneTransferCommand := exec.Command("dig", "AXFR", domain)
+		zoneTransferOutput, err := zoneTransferCommand.Output()
+		if err != nil {
+			fmt.Println("Error running DNS zone transfer:", err)
+		} else {
+			fmt.Println("DNS zone transfer output for", domain, ":\n", string(zoneTransferOutput))
+		}
+	}
+}
+
+// After finishing the reconnaissance phase, clean out the unnecessary files from the system
 func cleanupUnnecessaryFiles(profileName string) {
-	fmt.Println("Reconaissance phase complete! clearing unnecessary report files...")
+	fmt.Println("Reconnaissance phase complete! Clearing unnecessary report files...")
 	var fileToRemove string = "./scans/" + profileName + "/targets/subfinder.txt"
 	_ = os.Remove(fileToRemove)
 	fileToRemove = "./scans/" + profileName + "/targets/amass.txt"
